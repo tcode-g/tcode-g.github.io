@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Fullscreen Camera with Zoom</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: black;
+        }
+
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        select, input {
+            width: 100%;
+            font-size: 16px;
+            padding: 10px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        select {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <video id="video" autoplay playsinline></video>
+
+    <div class="controls">
+        <select id="cameraSelect"></select>
+        <input type="range" id="zoomSlider" min="1" max="1" step="0.1" value="1" disabled>
+    </div>
+
+    <script>
+        const cameraSelect = document.getElementById("cameraSelect");
+        const video = document.getElementById("video");
+        const zoomSlider = document.getElementById("zoomSlider");
+        let currentStream;
+
+        // Prompt user for camera access and list cameras
+        async function listCameras() {
+            try {
+                // Request camera permission explicitly
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop()); // Stop preview after permission granted
+
+                // Now list available cameras
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(device => device.kind === "videoinput");
+
+                cameraSelect.innerHTML = ""; 
+                cameras.forEach((camera, index) => {
+                    const option = document.createElement("option");
+                    option.value = camera.deviceId;
+                    option.textContent = camera.label || `Camera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+
+                if (cameras.length > 0) {
+                    startCamera(cameras[0].deviceId);
+                }
+            } catch (error) {
+                console.error("Camera access denied or error occurred:", error);
+                alert("Camera access is required to use this feature.");
+            }
+        }
+
+        // Start streaming from the selected camera
+        async function startCamera(deviceId) {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            const constraints = {
+                video: { deviceId: { exact: deviceId } }
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                currentStream = stream;
+
+                const track = stream.getVideoTracks()[0];
+                const capabilities = track.getCapabilities();
+
+                if (capabilities.zoom) {
+                    zoomSlider.min = capabilities.zoom.min;
+                    zoomSlider.max = capabilities.zoom.max;
+                    zoomSlider.step = capabilities.zoom.step || 0.1;
+                    zoomSlider.value = capabilities.zoom.min;
+                    zoomSlider.disabled = false;
+
+                    zoomSlider.oninput = () => {
+                        track.applyConstraints({ advanced: [{ zoom: zoomSlider.value }] });
+                    };
+                } else {
+                    zoomSlider.disabled = true;
+                }
+            } catch (error) {
+                console.error("Error starting camera:", error);
+            }
+        }
+
+        // Change camera when user selects a different option
+        cameraSelect.onchange = () => {
+            startCamera(cameraSelect.value);
+        };
+
+        // Request camera access and list cameras on page load
+        listCameras();
+    </script>
+
+</body>
+</html>
